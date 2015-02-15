@@ -24,16 +24,24 @@
 #define ICMP6_SIZE 8
 #define PAYLOAD_SIZE (MTU-(IPV6HDR_SIZE+ICMP6_SIZE))
 #define ETHER_CRC_SIZE 4
-#define ETHER_TOTAL_SIZE (MTU + ETHER_SIZE + ETHER_CRC_SIZE)
+#define ETHER_TOTAL_SIZE (MTU + ETHER_SIZE)
 
 typedef struct fullframe {
    u_int8_t ether_frame  [ETHER_SIZE];
    u_int8_t ipv6_header  [IPV6HDR_SIZE];
    u_int8_t icmp6_header [ICMP6_SIZE];
    u_int8_t payload [PAYLOAD_SIZE];
-   u_int8_t crc [ETHER_CRC_SIZE];
 } fullframe;
 
+int sockfd(void) {
+  static sock = 0;
+  if (!sock) {
+    sock=socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW);
+  }
+  if (sock == -1) {
+    perror("socket");
+  }
+}
 
 void hexdump ( char *s,  uint8_t *p, int n) {
           int i;
@@ -67,6 +75,23 @@ uint16_t csum(uint16_t *buf, int count)
   return (uint16_t)(~sum);
 }
 
+uint16_t csum_3(uint16_t *buf1, int count1, uint16_t *buf2, int count2, uint16_t *buf3, int count3)
+{
+  uint32_t sum;
+  for(sum=0; count1>0; count1-=2)
+    sum += *buf1++;
+  for(;count2>0; count2-=2) 
+    sum += *buf2++;
+  for(;count3>0; count3-=2) 
+    sum += *buf3++;
+  sum = (sum >> 16) + (sum &0xffff);
+  sum += (sum >> 16);
+  return (uint16_t)(~sum);
+}
+
+
+
+
 /* returns packet id */
 static u_int32_t block_pkt (struct nfq_data *tb)
 {
@@ -78,10 +103,12 @@ static u_int32_t block_pkt (struct nfq_data *tb)
         int data_len;
         int copy_len;
         unsigned char *data;
+        uint16_t c;
         
-        
-        // You know what? Screw it.
-        // Big ass static block of memory.
+        // Where to address the raw packets - fill this in 
+        // as we go
+        struct sockaddr_ll socket_address;
+        memset(&socket_address,0,sizeof(socket_address));
         
         
         // I'm tired of fighting all the crud,
@@ -99,7 +126,7 @@ static u_int32_t block_pkt (struct nfq_data *tb)
         
         
         // Get the packet ID.  NEeded for netfilter_queue response.
-        fprintf(stderr,"TRACE: %s %i\n",__FILE__,__LINE__);
+        fprintf(stdout,"TRACE: %s %i\n",__FILE__,__LINE__);
         ph = nfq_get_msg_packet_hdr(tb);
         if (ph) {
                 id = ntohl(ph->packet_id);
@@ -108,7 +135,7 @@ static u_int32_t block_pkt (struct nfq_data *tb)
         }
         
         // Get the data payload from netfilter_queue
-        fprintf(stderr,"TRACE: %s %i\n",__FILE__,__LINE__);
+        fprintf(stdout,"TRACE: %s %i\n",__FILE__,__LINE__);
         ret = nfq_get_payload(tb, &data);
         if (ret >= 0)
                 printf("payload_len=%d ", ret);
@@ -132,14 +159,15 @@ static u_int32_t block_pkt (struct nfq_data *tb)
                 
                 // Ethernet frame destination
                 memcpy(&buffer.ether_frame[0], hwph->hw_addr, 6);
-                
+                memcpy(socket_address.sll_addr, hwph->hw_addr, 6);
+                socket_address.sll_halen = ETH_ALEN;
         }
         
         // TODO: Ethernet frame source
         
-        // Ethernet frame type - ETH_P_IP
-        buffer.ether_frame[12] = 0x86;
-        buffer.ether_frame[13] = 0xdd;
+        // Ethernet frame type
+        buffer.ether_frame[12] = ETH_P_IPV6 / 256;
+        buffer.ether_frame[13] = ETH_P_IPV6 % 256;
         
         // Show the ethernet frame
         hexdump("DUMP: ether_frame",buffer.ether_frame,sizeof(buffer.ether_frame));
@@ -169,8 +197,8 @@ static u_int32_t block_pkt (struct nfq_data *tb)
         buffer.icmp6_header[1] = 0;  // Code (not used)
         
         // TODO Checksum
-        buffer.icmp6_header[2] = 0;
-        buffer.icmp6_header[3] = 0;
+        buffer.icmp6_header[2] = 0; // TODO Checksum
+        buffer.icmp6_header[3] = 0; // TODO checksum
         
         // MTU expressed as 32 bits
         buffer.icmp6_header[4] = (MTU >> 24) & 0xff;
@@ -180,19 +208,49 @@ static u_int32_t block_pkt (struct nfq_data *tb)
 
         memcpy(buffer.payload, data, copy_len);
         hexdump("ICMP6",buffer.icmp6_header,sizeof(buffer.icmp6_header) + copy_len);
+
+        u_int8_t pseudoheader[40];
+        memcpy(pseudoheader, &buffer.ipv6_header[8], 32);
+        pseudoheader[32] = 0; // length never more than 0xffff
+        pseudoheader[33] = 0; // length never more than 0xffff
+        pseudoheader[34] = (ICMP6_SIZE + copy_len) / 256;
+        pseudoheader[35] = (ICMP6_SIZE + copy_len) % 256;
+        pseudoheader[36] = 0;  // zero
+        pseudoheader[37] = 0;  // zero
+        pseudoheader[38] = 0;  // zero 
+        pseudoheader[39] = 58;  // ICMPv6 header code
+        
+        c = csum_3( (uint16_t *) pseudoheader, sizeof(pseudoheader),
+        (uint16_t *) buffer.icmp6_header, sizeof( buffer.icmp6_header),
+        (uint16_t *) buffer.payload, copy_len);
+        buffer.icmp6_header[2] = c % 256;
+        buffer.icmp6_header[3] = c / 256;
+        
+        hexdump("PseudoHeader",pseudoheader,sizeof(pseudoheader));
         
 
+        hexdump("ICMP6",buffer.icmp6_header,sizeof(buffer.icmp6_header) + copy_len);
+        
+        
+        
+
+
+
         // Device ID that the packet came from
-        fprintf(stderr,"TRACE: %s %i\n",__FILE__,__LINE__);
+        fprintf(stdout,"TRACE: %s %i\n",__FILE__,__LINE__);
         ifi = nfq_get_indev(tb);
-        if (ifi)
+        if (ifi)  {
                 printf("indev=%u ", ifi);
+                socket_address.sll_ifindex = ifi;
+        }
 
         fputc('\n', stdout);
-        fprintf(stderr,"TRACE: %s %i\n",__FILE__,__LINE__);
-
-
-
+        fprintf(stdout,"TRACE: %s %i\n",__FILE__,__LINE__);
+        
+        int tx_len = ETHER_SIZE + IPV6HDR_SIZE + ICMP6_SIZE + copy_len;
+if (sendto(sockfd(), &buffer, tx_len, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) < 0)
+    printf("Send failed\n");
+    
 
 
 
@@ -281,7 +339,7 @@ int main(int argc, char **argv)
         char buf[4096] __attribute__ ((aligned));
 
   if (argc != 3) {
-    fprintf(stderr,"usage: a.out interface netgroup\n");
+    fprintf(stdout,"usage: a.out interface netgroup\n");
     exit(1);
   }
   interface = argv[1];
@@ -291,32 +349,32 @@ int main(int argc, char **argv)
         printf("opening library handle\n");
         h = nfq_open();
         if (!h) {
-                fprintf(stderr, "error during nfq_open()\n");
+                fprintf(stdout, "error during nfq_open()\n");
                 exit(1);
         }
 
         printf("unbinding existing nf_queue handler for AF_INET6 (if any)\n");
         if (nfq_unbind_pf(h, AF_INET6) < 0) {
-                fprintf(stderr, "error during nfq_unbind_pf()\n");
+                fprintf(stdout, "error during nfq_unbind_pf()\n");
                 exit(1);
         }
 
         printf("binding nfnetlink_queue as nf_queue handler for AF_INET6\n");
         if (nfq_bind_pf(h, AF_INET6) < 0) {
-                fprintf(stderr, "error during nfq_bind_pf()\n");
+                fprintf(stdout, "error during nfq_bind_pf()\n");
                 exit(1);
         }
 
         printf("binding this socket to queue '%u'\n",queue);
         qh = nfq_create_queue(h,  queue, &cb, NULL);
         if (!qh) {
-                fprintf(stderr, "error during nfq_create_queue()\n");
+                fprintf(stdout, "error during nfq_create_queue()\n");
                 exit(1);
         }
 
         printf("setting copy_packet mode\n");
         if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0) {
-                fprintf(stderr, "can't set packet_copy mode\n");
+                fprintf(stdout, "can't set packet_copy mode\n");
                 exit(1);
         }
 
