@@ -13,6 +13,7 @@
 #include <netinet/udp.h>
 #include <netinet/ether.h>
 #include <linux/if_packet.h>
+#include <linux/sockios.h>
 
 // netfilter - lots of stuff pilfered from nfqnl_test.c
 #include <linux/netfilter.h>            /* for NF_ACCEPT */
@@ -42,6 +43,45 @@ int sockfd(void) {
     perror("socket");
   }
 }
+
+uint8_t *
+macaddr_for_interface (int i)
+{
+  static int last_i = 0xfffff;
+  static uint8_t buffer[6];
+  static uint8_t devname[IF_NAMESIZE];
+
+  if (i != last_i)
+    {
+      int s = sockfd ();	// * Need a random socket FD to do ioctl against
+      char *interface = NULL;
+      memset (buffer, 0, sizeof (buffer));
+      interface = if_indextoname (i, devname);
+      struct ifreq ifr;
+        
+      if (interface)
+	{
+	  printf ("Looked up %d, found %s ", i, interface);
+
+	  // Use ioctl() to look up interface name and get its MAC address.   
+	  memset (&ifr, 0, sizeof (ifr));
+	  snprintf (ifr.ifr_name, sizeof (ifr.ifr_name), "%s", interface);
+	  if (ioctl (s, SIOCGIFHWADDR, &ifr) < 0)
+	    {
+	      perror ("ioctl() failed to get source MAC address ");
+	      exit (1);
+	    }
+	  memcpy (buffer, ifr.ifr_hwaddr.sa_data, 6);
+
+	}
+
+    }
+  printf("interface %d mac %02x:%02x:%02x:%02x:%02x:%02x",
+       i, buffer[0],buffer[1],buffer[2],buffer[3],buffer[4],buffer[5]);
+       
+  return buffer;
+}
+
 
 void hexdump ( char *s,  uint8_t *p, int n) {
           int i;
@@ -242,6 +282,7 @@ static u_int32_t block_pkt (struct nfq_data *tb)
         if (ifi)  {
                 printf("indev=%u ", ifi);
                 socket_address.sll_ifindex = ifi;
+                memcpy(&buffer.ether_frame[6], macaddr_for_interface(ifi),6);
         }
 
         fputc('\n', stdout);
