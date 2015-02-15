@@ -17,4 +17,4 @@ dist-stable: dist-prep
 
 mtu1280:
 	gcc mtu1280.c -lnetfilter_queue -o mtu1280
-	sudo ./mtu1280 eth0 0
+	sudo ./mtu1280  0

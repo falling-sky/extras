@@ -379,12 +379,11 @@ int main(int argc, char **argv)
         char *interface;
         char buf[4096] __attribute__ ((aligned));
 
-  if (argc != 3) {
-    fprintf(stdout,"usage: a.out interface netgroup\n");
+  if (argc != 2) {
+    fprintf(stdout,"usage: a.out netgroup_number\n");
     exit(1);
   }
-  interface = argv[1];
-  queue = strtol(argv[2],NULL,10);
+  queue = strtol(argv[1],NULL,10);
   
 
         printf("opening library handle\n");
