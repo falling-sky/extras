@@ -141,7 +141,7 @@ sub showOptionsHelp {
 
 sub update_daily_summary {
     my ($rescan) = @_;
-    my $unix = $midnight - $rescan * 86400;
+    my $unix = $midnight - $rescan * 86400 + 86400;
     while ( $unix <= $midnight ) {
         my $day   = strftime( '%Y-%m-%d', localtime $unix );
         my $start = "$day 00:00:00";
