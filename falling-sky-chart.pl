@@ -189,18 +189,18 @@ sub update_daily_summary {
             $bystatus{ $byvalues{$key} }++;
         }
 
-#        # Delete the previous count for this date, in preparation to update it.
-#        {
-#            my $sql_template = "delete from daily_summary where datestamp = ?;";
-#            my $sth          = $dbh->prepare($sql_template);
-#            $sth->execute($day) or die $sth->errstr;
-#            $sth->finish();
-#
-#        }
+        # Delete the previous count for this date, in preparation to update it.
+        {
+            my $sql_template = "delete from daily_summary where datestamp = ?;";
+            my $sth          = $dbh->prepare($sql_template);
+            $sth->execute($day) or die $sth->errstr;
+            $sth->finish();
+
+        }
 
         # Insert new records
         {
-            my $sql_template = "replace into daily_summary (datestamp,total,tokens) values (?,?,?);";
+            my $sql_template = "insert into daily_summary (datestamp,total,tokens) values (?,?,?);";
             my $sth          = $dbh->prepare($sql_template);
             foreach my $tokens ( keys %bystatus ) {
                 my $count = $bystatus{$tokens};
