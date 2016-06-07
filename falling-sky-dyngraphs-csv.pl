@@ -395,6 +395,8 @@ sub generate_data {
         foreach my $date (@dates) {
             my $d = strftime( '%Y-%m-%d', gmtime $date );
             next if ( $d =~ m/2010-03-31/ );
+            next if ( $d =~ m/2016-06-05/ );
+            next if ( $d =~ m/2016-06-06/ );
             my @val = map( $dates{$date}{$_}, grep( $_ ne "total", @buckets ) );
             my $total = $dates{$date}{"total"};
             if ( $total > 0 ) {
@@ -422,6 +424,8 @@ sub generate_data {
         foreach my $date (@dates) {
             my $d = strftime( '%Y-%m-%d', gmtime $date );
             next if ( $d =~ m/2010-03-31/ );
+            next if ( $d =~ m/2016-06-05/ );
+            next if ( $d =~ m/2016-06-06/ );
             my @val = map( $dates{$date}{$_}, @buckets );
             my $val = join( ",", @val );
             print $fh "$d,$val\n";
