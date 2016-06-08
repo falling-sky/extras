@@ -17,6 +17,12 @@ my ( $MirrorConfig, $PrivateConfig, $dbh, $midnight );
 
 $ENV{"TZ"} = "UTC";
 
+my %SUPPRESS = map { $_ => 1 } qw(
+  2010-03-31
+  #2016-06-05
+  #2016-06-06
+);
+
 ################################################################
 # getopt                                                       #
 ################################################################
@@ -394,9 +400,7 @@ sub generate_data {
 
         foreach my $date (@dates) {
             my $d = strftime( '%Y-%m-%d', gmtime $date );
-            next if ( $d =~ m/2010-03-31/ );
-            next if ( $d =~ m/2016-06-05/ );
-            next if ( $d =~ m/2016-06-06/ );
+            next if (exists $SUPPRESS{$d});
             my @val = map( $dates{$date}{$_}, grep( $_ ne "total", @buckets ) );
             my $total = $dates{$date}{"total"};
             if ( $total > 0 ) {
@@ -423,9 +427,7 @@ sub generate_data {
 
         foreach my $date (@dates) {
             my $d = strftime( '%Y-%m-%d', gmtime $date );
-            next if ( $d =~ m/2010-03-31/ );
-            next if ( $d =~ m/2016-06-05/ );
-            next if ( $d =~ m/2016-06-06/ );
+            next if (exists $SUPPRESS{$d});
             my @val = map( $dates{$date}{$_}, @buckets );
             my $val = join( ",", @val );
             print $fh "$d,$val\n";
