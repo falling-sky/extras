@@ -1,6 +1,7 @@
 #! /usr/bin/env perl
 
-# Create charts based on daily_summary
+# Read the recent few days of survey day, update summary tables;
+# Create CSV files for dygraphs javascript charting library
 
 use Getopt::Long;
 use POSIX strftime;
@@ -29,12 +30,29 @@ my %SUPPRESS = map { $_ => 1 } qw(
 
 my ( $usage, %argv, %input ) = "";
 
+$usage = <<"EOF";
+[--export 750] or [--since 2010/05/01]
+
+If --since is used, it will be used in preference.
+Otherwise, --export will be used; with a default
+of just over two years.
+
+Examples:
+
+$0 --config /var/www/test-ipv6.example.com/site/config.js --days 750
+
+$0 --config /var/www/test-ipv6.example.com/site/config.js --since 2010/05/01
+
+EOF
+
+
 %input = (
     "rescan=i"  => "rescan this many days (3)",
     "config=s"  => "config.js file (REQUIRED)",
     "sitedir=s" => "site directory(default: same as config)",
     "private=s" => "private.js file (default: same place as config.js)",
-    "days=i" => "number of days (750) to export/graph",
+    "days=i" => "export number of days (750) to export/graph",
+    "since=s" => "export since this date YYYY/MM/DD ie 2010/05/01",
     "v|verbose" => "spew extra data to the screen",
     "h|help"    => "show option help"
 );
@@ -337,13 +355,17 @@ sub check_results {
 } ## end sub check_results
 
 ################################################################
-# rrd-generate-db                                              #
+# create_csv creates the csv files                          #
 ################################################################
 
-sub generate_data {
-    my ($rescan) = @_;
+sub create_csv {
+    my ($days,$since) = @_;
     my $start_date =
-      strftime( '%Y-%m-%d', gmtime( $midnight - $rescan * 86400 ) );
+      strftime( '%Y-%m-%d', gmtime( $midnight - $days * 86400 ) );
+    if ($since ne "") {
+      $start_date = $since;
+    }  
+     
     my $stop_date = strftime( '%Y-%m-%d', gmtime( $midnight + 1 * 86400 ) );
     my $dir = $argv{"sitedir"};
 
@@ -452,11 +474,8 @@ $MirrorConfig  = get_config( $argv{"config"},  "MirrorConfig" );
 $PrivateConfig = get_config( $argv{"private"}, "PrivateConfig" );
 validate_private_config($PrivateConfig);
 $dbh        = get_db_handle( $PrivateConfig->{db} );
-$DB::single = 1;
+
 update_daily_summary( $argv{"rescan"} );
 update_monthly_summary( $argv{"rescan"} );
-generate_data($argv{"days"});  # A bit over 2 years
-
-##  dygraphs.com - looks pretty cool - but not flexible in terms of mapping data to graph
-#     whatever we do in csv, will "stick"
+create_csv($argv{"days"},$argv{"since"});  # A bit over 2 years
 
