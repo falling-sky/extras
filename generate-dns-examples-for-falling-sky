@@ -41,8 +41,6 @@ $argv{"buggy"} = make_buggy($argv{"4"});
 
 my $main = <<"EOF";
 
-On your main name servers:
-
 ;################################################################
 ;# ZONE: $argv{domain}. 
 ;# Put this on your real name servers.  Fix the SOA and NS
