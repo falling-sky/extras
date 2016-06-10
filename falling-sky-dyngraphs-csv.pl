@@ -34,6 +34,7 @@ my ( $usage, %argv, %input ) = "";
     "config=s"  => "config.js file (REQUIRED)",
     "sitedir=s" => "site directory(default: same as config)",
     "private=s" => "private.js file (default: same place as config.js)",
+    "days=i" => "number of days (750) to export/graph",
     "v|verbose" => "spew extra data to the screen",
     "h|help"    => "show option help"
 );
@@ -53,6 +54,8 @@ if ( ( !$result ) || ( !$argv{"config"} ) || ( $argv{h} ) ) {
     &showOptionsHelp;
     exit 0;
 }
+
+$argv{"days"}||=750;
 
 ################################################################
 # configs                                                      #
@@ -386,8 +389,7 @@ sub generate_data {
         "Broken DS",
         "Confused",
         "Missing",
-        "Web Filter",
-        "total"
+        "Web Filter"
     );
 
     {
@@ -453,7 +455,7 @@ $dbh        = get_db_handle( $PrivateConfig->{db} );
 $DB::single = 1;
 update_daily_summary( $argv{"rescan"} );
 update_monthly_summary( $argv{"rescan"} );
-generate_data(600);
+generate_data($argv{"days"});  # A bit over 2 years
 
 ##  dygraphs.com - looks pretty cool - but not flexible in terms of mapping data to graph
 #     whatever we do in csv, will "stick"
