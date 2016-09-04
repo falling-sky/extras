@@ -192,6 +192,11 @@ use Net::DNS::Resolver;
 my $qname = shift @ARGV || "ds.v6ns.test-ipv6.com";
 my $qtype = shift @ARGV || "AAAA";
 
+my $dir = "dns2dot-output";
+my $basename = "$dir/$qname.$qtype";
+system("mkdir","-p",$dir);
+
+
 main();
 
 # Our first ask will be against f.root-servers.net 192.5.5.241
@@ -226,7 +231,7 @@ sub main {
 }
 
 sub dot_open {
-    open( DOT, ">1.dot" );
+    open( DOT, ">$basename.dot" );
     print DOT "digraph G {\n";
 }
 
@@ -279,7 +284,7 @@ sub dot_link {
 
 sub dot_show {
     print "show dot!";
-    my $cmd = "dot -Tpdf -o1.pdf < 1.dot && open 1.pdf";
+    my $cmd = "dot -Tpdf -o$basename.pdf < $basename.dot && open $basename.pdf";
     print "% $cmd\n";
     system $cmd;
 }
